@@ -211,3 +211,36 @@ best_model <- ranger(formula = life_expectancy ~ .,
 preds <- predict(best_model, test_data)
 test_mae <- mean(abs(preds$predictions - test_data$life_expectancy))
 test_mae
+
+
+# Logistic Regression -----------------------------------------------------
+attrition
+set.seed(42)
+attrition_split <- initial_split(attrition, prop = 0.75)
+attrition_train <- training(attrition_split)
+attrition_test <- testing(attrition_split)
+cv_attrition <- attrition_train %>% 
+    vfold_cv() %>% 
+    mutate(train = map(splits, ~ training(.x)), 
+           validate = map(splits, ~ testing(.x)))
+cv_attrition
+cv_models_lr <- cv_attrition %>% 
+    mutate(model = map(train, ~ glm(Attrition ~ ., 
+                                    data = .x, 
+                                    family = "binomial")))
+# use recall to evaluate model performance on each fold
+cv_perf_lr <- cv_models_lr %>% 
+    mutate(
+        # Prepare binary vector of actual Attrition values in validate
+        validate_actual = map(validate, ~.x$Attrition == "Yes"),
+        # Prepare binary vector of predicted Attrition values for validate
+        validate_predicted = map2(model, 
+                                  validate, 
+                                  ~ predict(.x, .y, type = "response") > 0.5)
+        ) %>% 
+    mutate(
+        validate_recall = map2_dbl(validate_actual, 
+                                   validate_predicted, 
+                                   ~ recall(.x, .y))
+    )
+mean(cv_perf_lr$validate_recall)
