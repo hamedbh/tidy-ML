@@ -244,3 +244,30 @@ cv_perf_lr <- cv_models_lr %>%
                                    ~ recall(.x, .y))
     )
 mean(cv_perf_lr$validate_recall)
+
+# Random Forest (Classification) -----------------------------------------------
+cv_models_rf_class <- cv_attrition %>% 
+    crossing(mtry = c(2, 4, 8, 16)) %>% 
+    mutate(model = map2(train, 
+                        mtry, 
+                        ~ ranger(formula = Attrition ~ ., 
+                                 data = .x, 
+                                 mtry = .y, 
+                                 num.trees = 100, 
+                                 seed = 42)))
+cv_perf_recall_rf_class <- cv_models_rf_class %>% 
+    mutate(
+        validate_actual = map(validate, ~.x$Attrition == "Yes"),
+        # Prepare binary vector of predicted Attrition values for validate
+        validate_predicted = map2(.x = model, 
+                                  .y = validate, 
+                                  ~ predict(.x, 
+                                            .y, 
+                                            type = "response")$predictions == "Yes")
+    ) %>% 
+    mutate(recall = map2_dbl(validate_actual, 
+                             validate_predicted, 
+                             ~ recall(.x, .y)))
+cv_perf_recall_rf_class %>% 
+    group_by(mtry) %>% 
+    summarise(mean_recall = mean(recall))
